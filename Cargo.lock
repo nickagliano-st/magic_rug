@@ -2604,7 +2604,6 @@ name = "magic_rug"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "coreaudio-sys",
 ]
 
 [[package]]
