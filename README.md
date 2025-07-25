@@ -1,8 +1,11 @@
 # Magic Rug
 
-## install and running locally
-* clone repo 
+## installing and running locally
+* clone repo
 * bevy 0.15.3 requires the nightly build
   * `rustup install nightly && rustup override set nightly`
-* cargo build
-* cargo run
+* Run the build - `cargo build`
+* Run the game - `cargo run`
+
+## bin commands
+- `bin/run_dev` -- runs the game in development mode with debug stepping enabled
