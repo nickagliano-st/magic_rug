@@ -8,4 +8,4 @@
 * Run the game - `cargo run`
 
 ## bin commands
-- `bin/run_dev` -- runs the game in development mode with debug stepping enabled
+- `bin/run_dev` - runs the game in development mode with debug stepping enabled
