@@ -9,6 +9,9 @@ const BACKGROUND_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
 const TEXT_COLOR: Color = Color::srgb(0.5, 0.5, 1.0);
 const SCORE_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
 
+const GEM_SIZE: f32 = 25.;
+const PLAYER_SIZE: f32 = 100.;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -60,28 +63,25 @@ fn move_player(
     mut player_transform: Single<&mut Transform, With<Player>>,
     time: Res<Time>,
 ) {
-    let mut direction = Vec2::ZERO;
-
-    // permanent direction -> right
-    direction.x += 1.0;
-
-    // if keyboard_input.pressed(KeyCode::ArrowLeft) {
-    //     direction.x -= 1.0;
-    // }
-    // if keyboard_input.pressed(KeyCode::ArrowRight) {
-    //     direction.x += 1.0;
-    // }
+    let mut vertical = 0.0;
 
     if keyboard_input.pressed(KeyCode::ArrowUp) {
-        direction.y += 1.0;
+        vertical += 1.0;
     }
     if keyboard_input.pressed(KeyCode::ArrowDown) {
-        direction.y -= 1.0;
+        vertical -= 1.0;
     }
 
-    let speed = 300.0;
-    player_transform.translation +=
-        direction.normalize_or_zero().extend(0.0) * speed * time.delta_secs();
+    let horizontal_speed = 300.0;
+    let vertical_speed = 300.0;
+
+    let movement = Vec3::new(
+        horizontal_speed * time.delta_secs(), // constant scroll right
+        vertical * vertical_speed * time.delta_secs(), // up/down input
+        0.0,
+    );
+
+    player_transform.translation += movement;
 }
 
 fn follow_player(
@@ -125,7 +125,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Sprite {
             image: asset_server.load("sprites/rug.png"),
-            custom_size: Some(Vec2::new(100., 100.)),
+            custom_size: Some(Vec2::new(PLAYER_SIZE, PLAYER_SIZE)),
             ..default()
         },
         Player,
@@ -137,10 +137,14 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         let y = rand::random::<f32>() * 400.0 - 200.0;
 
         commands.spawn((
-            Sprite::from_color(Color::srgb(1.0, 0.9, 0.0), Vec2::ONE),
+            Sprite {
+                image: asset_server.load("sprites/gem.png"),
+                custom_size: Some(Vec2::new(GEM_SIZE, GEM_SIZE)),
+                ..default()
+            },
             Transform {
                 translation: Vec3::new(x, y, 0.0),
-                scale: Vec3::splat(20.0),
+                // scale: Vec3::splat(20.0),
                 ..default()
             },
             Gem,
