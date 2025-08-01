@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.15.3"
+rand = "0.9.2"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
