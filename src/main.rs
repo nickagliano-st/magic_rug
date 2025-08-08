@@ -7,10 +7,14 @@ const SCOREBOARD_TEXT_PADDING: Val = Val::Px(5.0);
 
 const BACKGROUND_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
 const TEXT_COLOR: Color = Color::srgb(0.5, 0.5, 1.0);
+const GREEN_TEXT: Color = Color::srgb(0.5, 1.0, 0.5);
+const RED_TEXT: Color = Color::srgb(1.0, 0.5, 0.5);
+
 const SCORE_COLOR: Color = Color::srgb(1.0, 0.5, 0.5);
 
 const GEM_SIZE: f32 = 25.;
 const PLAYER_SIZE: f32 = 100.;
+const MAX_HEALTH: i32 = 3;
 
 fn main() {
     App::new()
@@ -25,20 +29,33 @@ fn main() {
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .add_event::<CollisionEvent>()
         .add_systems(Startup, setup)
+        .insert_state(GameState::Playing)
         // Add our gameplay simulation systems to the fixed timestep schedule
         // which runs at 64 Hz by default
         .add_systems(
             FixedUpdate,
             (move_player, follow_player, collect_gems)
                 // `chain`ing systems together runs them in order
-                .chain(),
+                .chain()
+                .run_if(in_state(GameState::Playing)),
         )
-        .add_systems(Update, update_scoreboard)
+        .add_systems(
+            Update,
+            (update_scoreboard, update_health_ui).run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(Update, check_player_death)
+        .add_systems(OnEnter(GameState::GameOver), show_game_over)
         .run();
 }
 
 #[derive(Component)]
 struct Player;
+
+#[derive(Component)]
+struct Health {
+    current: i32,
+    max: i32,
+}
 
 #[derive(Component)]
 struct Gem;
@@ -55,8 +72,23 @@ struct CollisionEvent;
 #[derive(Resource, Deref, DerefMut)]
 struct Score(usize);
 
+// UIs
 #[derive(Component)]
 struct ScoreboardUi;
+
+#[derive(Component)]
+struct HealthUi;
+
+#[derive(Component)]
+struct GameOverUi;
+
+// Game state
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+enum GameState {
+    #[default]
+    Playing,
+    GameOver,
+}
 
 fn move_player(
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -96,11 +128,12 @@ fn follow_player(
 fn collect_gems(
     mut commands: Commands,
     mut score: ResMut<Score>,
-    player_query: Query<&Transform, With<Player>>,
+    mut player_query: Query<(&Transform, &mut Health), With<Player>>,
     gem_query: Query<(Entity, &Transform), With<Gem>>,
     sound: Res<CollisionSound>,
 ) {
-    let player_pos = player_query.single().translation.truncate();
+    let (player_transform, mut health) = player_query.single_mut();
+    let player_pos = player_transform.translation.truncate();
 
     for (gem_entity, transform) in &gem_query {
         if player_pos.distance(transform.translation.truncate()) < 30.0 {
@@ -109,6 +142,9 @@ fn collect_gems(
 
             // Update score
             **score += 1;
+
+            // Simulate health loss for demo
+            health.current = (health.current - 1).max(0);
 
             // Play sound effect
             commands.spawn((AudioPlayer(sound.clone()), PlaybackSettings::DESPAWN));
@@ -129,6 +165,10 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             ..default()
         },
         Player,
+        Health {
+            current: MAX_HEALTH,
+            max: MAX_HEALTH,
+        },
     ));
 
     // Spawn Gems
@@ -156,7 +196,39 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let ball_collision_sound = asset_server.load("sounds/gem_collection.ogg");
     commands.insert_resource(CollisionSound(ball_collision_sound));
 
-    // Scoreboard
+    // Game Over UI
+    commands
+        .spawn((
+            // FIXME: This doesn't center! How do I make it work?
+            Node {
+                position_type: PositionType::Absolute,
+                // display: Display::Flex,
+                // width: Val::Percent(100.0),
+                // height: Val::Percent(100.0),
+                // justify_content: JustifyContent::Center,
+                // align_items: AlignItems::Center,
+                top: SCOREBOARD_TEXT_PADDING * 20.0,
+                left: SCOREBOARD_TEXT_PADDING * 20.0,
+                ..default()
+            },
+            Text::new(""), // Empty string -- invisible but we will append to it when the game is over
+            TextFont {
+                font_size: SCOREBOARD_FONT_SIZE,
+                ..default()
+            },
+            TextColor(TEXT_COLOR),
+            GameOverUi,
+        ))
+        .with_child((
+            TextSpan::default(),
+            TextFont {
+                font_size: SCOREBOARD_FONT_SIZE * 4.0,
+                ..default()
+            },
+            TextColor(RED_TEXT),
+        ));
+
+    // Scoreboard UI
     commands
         .spawn((
             Text::new("Score: "),
@@ -181,6 +253,65 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             },
             TextColor(SCORE_COLOR),
         ));
+
+    // Health UI
+    commands
+        .spawn((
+            Text::new("Health: "),
+            TextFont {
+                font_size: SCOREBOARD_FONT_SIZE,
+                ..default()
+            },
+            TextColor(TEXT_COLOR),
+            HealthUi,
+            Node {
+                position_type: PositionType::Absolute,
+                top: SCOREBOARD_TEXT_PADDING * 10.0,
+                left: SCOREBOARD_TEXT_PADDING,
+                ..default()
+            },
+        ))
+        .with_child((
+            TextSpan::default(),
+            TextFont {
+                font_size: SCOREBOARD_FONT_SIZE,
+                ..default()
+            },
+            TextColor(GREEN_TEXT),
+        ));
+}
+
+fn check_player_death(
+    player: Query<&Health, With<Player>>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    let health = player.single();
+    if health.current <= 0 {
+        // println!("Game Over!");
+        next_state.set(GameState::GameOver);
+    }
+}
+
+fn show_game_over(
+    state: Res<State<GameState>>,
+    game_over_root: Single<Entity, (With<GameOverUi>, With<Text>)>,
+    mut writer: TextUiWriter,
+) {
+    let message = match state.get() {
+        GameState::GameOver => "YOU DIED",
+        _ => "", // Clear the message if not dead
+    };
+
+    *writer.text(*game_over_root, 1) = message.to_string();
+}
+
+fn update_health_ui(
+    player: Query<&Health, With<Player>>,
+    health_root: Single<Entity, (With<HealthUi>, With<Text>)>,
+    mut writer: TextUiWriter,
+) {
+    let health = player.single();
+    *writer.text(*health_root, 1) = format!("{}/{}", health.current, health.max);
 }
 
 fn update_scoreboard(
